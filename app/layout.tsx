@@ -2,10 +2,13 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
+import dynamic from "next/dynamic"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
-import { Toaster } from "@/components/ui/toaster"
+import type { AdBannerProps } from "@/components/ui/ad-banner";
+
+const ThemeProvider = dynamic(() => import("@/components/theme-provider").then(mod => mod.ThemeProvider), { ssr: false })
+const Toaster = dynamic(() => import("@/components/ui/toaster").then(mod => mod.Toaster), { ssr: false })
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -14,8 +17,21 @@ export const metadata: Metadata = {
   description:
     "Calculate test scores in seconds with our modern, easy-to-use grade calculator. Perfect for students and teachers.",
   keywords: "grade calculator, test score, percentage calculator, student tools, teacher resources",
-    generator: 'v0.dev'
+  generator: 'v0.dev'
 }
+
+// AdBanner component for lazy loading, using default export and no explicit generic
+// const AdBanner = dynamic<AdBannerProps>(
+//   () => import("@/components/ui/ad-banner").then(mod => mod.AdBanner),
+//   {
+//     ssr: false,
+//     loading: () => <div style={{ height: 80 }} />,
+//   }
+// );
+const AdBanner = dynamic(() => import("@/components/ui/ad-banner"), {
+  ssr: false,
+  loading: () => <div style={{ height: 80 }} />,
+});
 
 export default function RootLayout({
   children,
@@ -27,19 +43,11 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <div className="min-h-screen flex flex-col">
-            {/* AdSense Top Banner Space */}
-            <div className="w-full h-20 bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950 dark:to-green-950 flex items-center justify-center border-b">
-              <div className="text-sm text-muted-foreground">Advertisement Space (728x90)</div>
-            </div>
-
+            <AdBanner position="top" />
             <Header />
             <main className="flex-1">{children}</main>
             <Footer />
-
-            {/* AdSense Bottom Banner Space */}
-            <div className="w-full h-16 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950 dark:to-blue-950 flex items-center justify-center border-t">
-              <div className="text-sm text-muted-foreground">Advertisement Space (Responsive)</div>
-            </div>
+            <AdBanner position="bottom" />
           </div>
           <Toaster />
         </ThemeProvider>

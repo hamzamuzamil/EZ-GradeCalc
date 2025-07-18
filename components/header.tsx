@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { motion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Menu, Calculator, BarChart3, Settings, Info } from "lucide-react"
@@ -18,34 +18,42 @@ const navigation = [
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isVisible, setIsVisible] = useState(true)
-  const [lastScrollY, setLastScrollY] = useState(0)
+  const lastScrollY = useRef(0)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const pathname = usePathname()
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY
-
-      setIsScrolled(currentScrollY > 10)
-
-      if (currentScrollY > lastScrollY && currentScrollY > 100) {
-        setIsVisible(false)
+    let ticking = false;
+    const throttle = (fn: (...args: any[]) => void, wait: number) => {
+      let lastTime = 0;
+      return (...args: any[]) => {
+        const now = Date.now();
+        if (now - lastTime >= wait) {
+          lastTime = now;
+          fn(...args);
+        }
+      };
+    };
+    const handleScroll = throttle(() => {
+      const currentScrollY = window.scrollY;
+      setIsScrolled(currentScrollY > 10);
+      if (currentScrollY > lastScrollY.current && currentScrollY > 100) {
+        setIsVisible(false);
       } else {
-        setIsVisible(true)
+        setIsVisible(true);
       }
-
-      setLastScrollY(currentScrollY)
-    }
-
-    window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [lastScrollY])
+      lastScrollY.current = currentScrollY;
+    }, 100);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
     <motion.header
       initial={{ y: 0 }}
-      animate={{ y: isVisible ? 0 : -100 }}
-      transition={{ duration: 0.3, ease: "easeInOut" }}
+      animate={prefersReducedMotion ? {} : { y: isVisible ? 0 : -100 }}
+      transition={prefersReducedMotion ? {} : { duration: 0.3, ease: "easeInOut" }}
       className={`sticky top-0 z-50 w-full border-b transition-all duration-300 ${
         isScrolled ? "bg-background/80 backdrop-blur-md shadow-lg" : "bg-background"
       }`}

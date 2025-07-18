@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { useState, useCallback, useEffect } from "react"
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,8 +12,9 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Calculator, Copy, Download, Share2, ChevronDown, ChevronUp, Trophy, Target, AlertCircle } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
-import { calculateGrade, saveToLocalStorage, loadFromLocalStorage, debounce, sanitizeInput } from "@/lib/grade-utils"
-// import { ErrorBoundary } from "@/components/error-boundary"
+import { calculateGrade, saveToLocalStorage, loadFromLocalStorage, sanitizeInput } from "@/lib/grade-utils"
+import { useChartData } from "@/hooks/use-chart-data"
+import { useAnimatedCounter } from "@/hooks/use-animated-counter"
 
 interface GradeResult {
   totalQuestions: number
@@ -32,8 +33,9 @@ export default function GradeCalculator() {
   const [showChart, setShowChart] = useState(false)
   const [result, setResult] = useState<GradeResult | null>(null)
   const [error, setError] = useState<string>("")
-  const [animatedPercentage, setAnimatedPercentage] = useState(0)
-  const [isCalculating, setIsCalculating] = useState(false)
+  const prefersReducedMotion = useReducedMotion();
+  const chartData = useChartData(totalQuestions, 200);
+  const animatedPercentage = useAnimatedCounter(result?.percentage ?? 0, !!prefersReducedMotion);
 
   // Load saved result from localStorage
   useEffect(() => {
@@ -45,78 +47,37 @@ export default function GradeCalculator() {
     }
   }, [])
 
-  // Debounced calculation function
-  const debouncedCalculate = useMemo(
-    () => debounce((total: string, wrong: string) => {
-      setIsCalculating(true)
-      
-      const totalNum = parseInt(total) || 0
-      const wrongNum = parseInt(wrong) || 0
+  // Calculation logic
+  const handleCalculate = useCallback((total: string, wrong: string) => {
+    const totalNum = parseInt(total) || 0
+    const wrongNum = parseInt(wrong) || 0
 
-      if (totalNum <= 0) {
-        setResult(null)
-        setError("")
-        setIsCalculating(false)
-        return
-      }
-
-      const calculation = calculateGrade(totalNum, wrongNum)
-      
-      if (!calculation.success) {
-        setError(calculation.error || "Calculation error")
-        setResult(null)
-        setIsCalculating(false)
-        return
-      }
-
+    if (totalNum <= 0) {
+      setResult(null)
       setError("")
-      setResult(calculation.data!)
-      saveToLocalStorage("lastGradeResult", calculation.data!)
-
-      // Animate percentage counter
-      setAnimatedPercentage(0)
-      const timer = setTimeout(() => {
-        let current = 0
-        const increment = calculation.data!.percentage / 50
-        const counter = setInterval(() => {
-          current += increment
-          if (current >= calculation.data!.percentage) {
-            setAnimatedPercentage(calculation.data!.percentage)
-            clearInterval(counter)
-          } else {
-            setAnimatedPercentage(current)
-          }
-        }, 20)
-      }, 100)
-
-      setIsCalculating(false)
-    }, 300),
-    []
-  )
-
-  // Live calculation with debouncing
-  useEffect(() => {
-    debouncedCalculate(totalQuestions, wrongAnswers)
-  }, [totalQuestions, wrongAnswers, debouncedCalculate])
-
-  // Memoized chart generation for performance
-  const chartData = useMemo(() => {
-    const total = parseInt(totalQuestions) || 0
-    if (total <= 0) return []
-
-    const chart = []
-    for (let wrong = 0; wrong <= total; wrong++) {
-      const calculation = calculateGrade(total, wrong)
-      if (calculation.success) {
-        chart.push({ 
-          wrong, 
-          percentage: calculation.data!.percentage, 
-          grade: calculation.data!.letterGrade 
-        })
-      }
+      return
     }
-    return chart
-  }, [totalQuestions])
+
+    const calculation = calculateGrade(totalNum, wrongNum)
+
+    if (!calculation.success) {
+      setError(calculation.error || "Calculation error")
+      setResult(null)
+      return
+    }
+
+    setError("")
+    setResult(calculation.data!)
+    saveToLocalStorage("lastGradeResult", calculation.data!)
+  }, [])
+
+  // Live calculation
+  useEffect(() => {
+    handleCalculate(totalQuestions, wrongAnswers)
+  }, [totalQuestions, wrongAnswers, handleCalculate])
+
+  // Chart data limit
+  const CHART_LIMIT = 200;
 
   // Secure input handlers with sanitization
   const handleTotalQuestionsChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -234,7 +195,7 @@ export default function GradeCalculator() {
                     max="1000"
                     aria-describedby="total-help"
                     aria-label="Total number of questions"
-                    disabled={isCalculating}
+                    disabled={false} // isCalculating is removed
                   />
                   <p id="total-help" className="text-xs text-muted-foreground">
                     The total number of questions on the test (1-1000)
@@ -256,7 +217,7 @@ export default function GradeCalculator() {
                     max="1000"
                     aria-describedby="wrong-help"
                     aria-label="Number of wrong answers"
-                    disabled={isCalculating}
+                    disabled={false} // isCalculating is removed
                   />
                   <p id="wrong-help" className="text-xs text-muted-foreground">
                     The number of questions answered incorrectly
@@ -289,12 +250,7 @@ export default function GradeCalculator() {
                   )}
                 </AnimatePresence>
 
-                {isCalculating && (
-                  <div className="flex items-center justify-center py-4">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                    <span className="ml-2 text-sm text-muted-foreground">Calculating...</span>
-                  </div>
-                )}
+                {/* isCalculating is removed */}
               </CardContent>
             </Card>
           </motion.div>
@@ -444,6 +400,12 @@ export default function GradeCalculator() {
             </AnimatePresence>
           </Card>
         </motion.div>
+      )}
+      {/* Chart Limit Warning */}
+      {parseInt(totalQuestions) > CHART_LIMIT && (
+        <div className="mt-4 text-center text-sm text-red-500">
+          Chart preview is limited to {CHART_LIMIT} questions for best performance.
+        </div>
       )}
     </div>
   )
